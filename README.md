@@ -4,7 +4,7 @@ The code for calculating the value of the PSD verification measure
 
 --- Description:
 
-Calculates the value of the Precipitation Smoothing Distance (PSD) verification measure. PSD is a verification measure that tries to estimate the spatial displacement of precipitation in two fields. 
+Calculates the value of the Precipitation Smoothing Distance (PSD) verification measure. PSD is a verification measure that tries to estimate the spatial displacement of precipitation in two fields. For a detailed description of the PSD measure please refer to the open access paper listed below in the references section. 
 
 --- Usage:
 
@@ -40,5 +40,7 @@ Gregor Skok (Gregor.Skok@fmf.uni-lj.si)
 
 --- References:
 
-Paper submitted to Applied sciences journal. 
+Skok G. A New Spatial Distance Metric for Verification of Precipitation. Applied Sciences. 2022; 12(8):4048. https://doi.org/10.3390/app12084048 
+
+
 
