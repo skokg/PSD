@@ -1,5 +1,7 @@
 # Run manually from Actions. PSD is pure Python: build one universal wheel,
 # then test that same artifact on each selected platform/Python combination.
+# The final psd-python-build-results ZIP includes distributions and full job logs,
+# even when checks fail. Read BUILD_STATUS.txt before using its packages.
 name: Build wheels
 run-name: PSD 2.0.0 / ${{ inputs.target }} / Python ${{ inputs.python_version }}
 
@@ -131,19 +133,57 @@ jobs:
           python -m unittest discover -s tests -v
 
   collect:
-    name: Save tested distributions
-    needs: [test, source, minimum-dependencies]
+    name: Collect distributions and full logs
+    needs: [build, test, source, minimum-dependencies]
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
     steps:
-      - uses: actions/download-artifact@v8
+      - name: Check out log collector
+        uses: actions/checkout@v6
         with:
-          name: psd-candidate-distributions
+          persist-credentials: false
+      - name: Download available candidate distributions
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: psd-candidate-distributions
           path: release-bundle
-      - uses: actions/upload-artifact@v7
+          merge-multiple: true
+      - name: Collect all upstream job logs and check results
+        if: ${{ !cancelled() }}
+        uses: actions/github-script@v8
+        env:
+          SELECTED_TARGET: ${{ inputs.target }}
+          SELECTED_PYTHON: ${{ inputs.python_version }}
+        with:
+          retries: 4
+          retry-exempt-status-codes: 400,401,403,422
+          script: |
+            const collect = require('./.github/scripts/collect_build_logs.cjs');
+            await collect({ github, context, core });
+      - name: Save PyPI files after all checks pass
+        if: ${{ success() && needs.build.result == 'success' && needs.test.result == 'success' && needs.source.result == 'success' && needs['minimum-dependencies'].result == 'success' }}
+        uses: actions/upload-artifact@v7
         with:
           name: psd-python-2.0.0-tested-distributions
-          path: release-bundle/*
+          path: |
+            release-bundle/*.whl
+            release-bundle/*.tar.gz
+          overwrite: true
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      # Preserve diagnostics after build, test, download or collection failures.
+      - name: Save distributions and logs as one ZIP
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: psd-python-build-results
+          path: release-bundle/
           overwrite: true
           if-no-files-found: error
           compression-level: 0
