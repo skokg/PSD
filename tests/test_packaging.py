@@ -1,6 +1,7 @@
 """Verify installed artifacts, and optionally inspect PSD_SDIST_PATH."""
 import base64
 import hashlib
+from email.parser import Parser
 from importlib import metadata
 import os
 from pathlib import Path, PurePosixPath
@@ -22,9 +23,14 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(info['Requires-Python'], '>=3.10')
         self.assertEqual(info['License-Expression'], 'MIT')
         self.assertEqual(info['Description-Content-Type'], 'text/markdown')
-        self.assertIn('# PSD Python:', info.get_payload())
+        # Parse the actual installed METADATA body, independent of changes to
+        # importlib.metadata's Message adapter (notably in Python 3.15).
+        raw_metadata = self.distribution.read_text('METADATA')
+        self.assertIsNotNone(raw_metadata)
+        description = Parser().parsestr(raw_metadata).get_payload()
+        self.assertIn('# PSD Python:', description)
         readme = Path(__file__).resolve().parents[1] / 'README.md'
-        self.assertEqual(info.get_payload().strip(), readme.read_text(encoding='utf-8').strip())
+        self.assertEqual(description.strip(), readme.read_text(encoding='utf-8').strip())
         self.assertEqual(set(self.distribution.requires),
                          {'numpy>=1.23.5', 'scipy>=1.9.3', 'scikit-image>=0.20'})
 
@@ -37,7 +43,10 @@ class PackagingTests(unittest.TestCase):
         installed = Path(self.distribution.locate_file('psd_python.py')).resolve()
         self.assertEqual(Path(psd.__file__).resolve(), installed)
         source = Path(__file__).resolve().parents[1] / 'src/psd_python.py'
-        self.assertEqual(installed.read_bytes(), source.read_bytes())
+        # Git may check out CRLF on Windows while the universal wheel has LF.
+        # Compare UTF-8 source text with universal newline handling; all other
+        # differences still fail, and RECORD hashes are verified separately.
+        self.assertEqual(installed.read_text(encoding='utf-8'), source.read_text(encoding='utf-8'))
         self.assertEqual(set(psd.__all__),
                          {'calculate_PSD', 'calculate_PSS', 'construct_circular_kernel_field'})
         self.assertTrue(all(callable(getattr(psd, name)) for name in psd.__all__))
