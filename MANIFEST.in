@@ -1,0 +1,5 @@
+# Explicit source archive contents; local build outputs are excluded.
+global-exclude *
+include pyproject.toml setup.py MANIFEST.in README.md LICENSE
+include src/psd_python.py
+include tests/test_psd_python.py tests/test_examples.py tests/test_packaging.py

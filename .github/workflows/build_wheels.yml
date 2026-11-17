@@ -1,0 +1,150 @@
+# Run manually from Actions. PSD is pure Python: build one universal wheel,
+# then test that same artifact on each selected platform/Python combination.
+name: Build wheels
+run-name: PSD 2.0.0 / ${{ inputs.target }} / Python ${{ inputs.python_version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: System and processor
+        type: choice
+        required: true
+        default: all
+        options: [all, linux-x86_64, windows-x86_64, macos-intel, macos-apple-silicon]
+      python_version:
+        description: Python version
+        type: choice
+        required: true
+        default: all
+        options: [all, '3.10', '3.11', '3.12', '3.13', '3.14', '3.15']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build universal wheel and source archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Build and validate metadata
+        run: |
+          python -m pip install build twine
+          python -m build
+          python -m twine check --strict dist/*
+      - uses: actions/upload-artifact@v7
+        with:
+          name: psd-candidate-distributions
+          path: dist/*
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 7
+
+  test:
+    name: Python ${{ matrix.python_version }} / ${{ matrix.target }}
+    needs: build
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        target: ${{ fromJSON(inputs.target == 'all' && '["linux-x86_64","windows-x86_64","macos-intel","macos-apple-silicon"]' || format('["{0}"]', inputs.target)) }}
+        python_version: ${{ fromJSON(inputs.python_version == 'all' && '["3.10","3.11","3.12","3.13","3.14","3.15"]' || format('["{0}"]', inputs.python_version)) }}
+    runs-on: ${{ fromJSON('{"linux-x86_64":"ubuntu-24.04","windows-x86_64":"windows-2022","macos-intel":"macos-15-intel","macos-apple-silicon":"macos-15"}')[matrix.target] }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python_version }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: psd-candidate-distributions
+          path: dist
+      - name: Install wheel and test installed package
+        shell: bash
+        env:
+          PSD_SDIST_PATH: ${{ github.workspace }}/dist/psd_python-2.0.0.tar.gz
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pip install dist/*.whl
+          python -m pip check
+          python -m unittest discover -s tests -v
+
+  source:
+    name: Rebuild and test source archive
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        with:
+          name: psd-candidate-distributions
+          path: dist
+      - name: Install and test from extracted source
+        shell: bash
+        env:
+          PSD_SDIST_PATH: ${{ github.workspace }}/dist/psd_python-2.0.0.tar.gz
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pip install dist/*.tar.gz
+          python -m pip check
+          mkdir source-test
+          tar -xzf dist/psd_python-2.0.0.tar.gz -C source-test
+          python -m unittest discover -s source-test/psd_python-2.0.0/tests -v
+
+  minimum-dependencies:
+    name: Minimum Python and runtime dependencies
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - uses: actions/download-artifact@v8
+        with:
+          name: psd-candidate-distributions
+          path: dist
+      - name: Test minimum dependencies
+        shell: bash
+        env:
+          PSD_SDIST_PATH: ${{ github.workspace }}/dist/psd_python-2.0.0.tar.gz
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pip install 'numpy==1.23.5' 'scipy==1.9.3' 'scikit-image==0.20.0' dist/*.whl
+          python -m pip check
+          python -m unittest discover -s tests -v
+
+  collect:
+    name: Save tested distributions
+    needs: [test, source, minimum-dependencies]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: psd-candidate-distributions
+          path: release-bundle
+      - uses: actions/upload-artifact@v7
+        with:
+          name: psd-python-2.0.0-tested-distributions
+          path: release-bundle/*
+          overwrite: true
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7

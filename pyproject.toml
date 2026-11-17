@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "psd_python"
+version = "2.0.0"
+description = "Precipitation Smoothing Distance for fields on a planar grid"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Gregor Skok", email = "Gregor.Skok@fmf.uni-lj.si"}]
+dependencies = ["numpy>=1.23.5", "scipy>=1.9.3", "scikit-image>=0.20"]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+]
+
+[project.urls]
+Homepage = "https://github.com/skokg/PSD"
+Repository = "https://github.com/skokg/PSD"
+Issues = "https://github.com/skokg/PSD/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = ["psd_python"]
+packages = []
+include-package-data = false
